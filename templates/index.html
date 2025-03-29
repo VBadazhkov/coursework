@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Анализ текста</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            display: flex; 
+            background-color: #f8f9fa; 
+            color: #333; 
+        }
+        .content { flex: 1; }
+        #keywords {
+            width: 280px;
+            margin-left: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            background-color: #ffffff;
+            max-height: 460px;
+            overflow: auto;
+            margin-top: 80px;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        #results-container {
+            width: 1200px; 
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            background-color: #ffffff;
+            max-height: 1200px;
+            overflow: auto;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .input-section { 
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        #results, #search-result { margin-top: 20px; }
+        #wordcloud { max-width: 100%; margin-top: 15px; }
+        .form-group { margin-bottom: 10px; }
+        .form-group label { display: block; margin-bottom: 5px; }
+        button {
+            background-color: #6c757d;
+            color: white;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover { background-color: #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1> Анализ текста</h1>
+        
+        <div class="input-section">
+            <form id="fileForm">
+                <div class="form-group">
+                    <label>Загрузите файл:</label>
+                    <input type="file" name="file" accept=".txt">
+                </div>
+                
+            </form>
+            
+            <p>Или введите текст:</p>
+            <form id="textForm">
+                <div class="form-group">
+                    <textarea name="text" rows="5" cols="50"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Сортировка:</label>
+                    <select name="sort_mode">
+                        <option value="frequency">По частоте</option>
+                        <option value="alphabet">По алфавиту</option>
+                        <option value="length">По длине</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Направление сортировки:</label>
+                    <label><input type="radio" name="ascending" value="false" checked> По убыванию</label>
+                    <label><input type="radio" name="ascending" value="true"> По возрастанию</label>
+                </div>
+                <div class="form-group">
+                    <label>Поиск слова:</label>
+                    <input type="text" name="search">
+                </div>
+                <div class="form-group">
+                    <label>Учитывать регистр:</label>
+                    <label><input type="checkbox" name="case_sensitive" value="true"> Да</label>
+                </div>
+                <button type="submit">Анализировать текст</button>
+            </form>
+        </div>
+        
+        <div id="results-container">
+            <h3>Результаты анализа</h3>
+            <div id="search-result"></div> <!-- Блок для результата поиска -->
+            <div id="results"></div>
+            <img id="wordcloud" src="" alt="Облако слов">
+        </div>
+    </div>
+
+    <div id="keywords">
+        <h3>Топ-10 ключевых слов</h3>
+        <ul id="keyword-list"></ul>
+    </div>
+
+    <script>
+        async function handleSubmit(e, formType) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const url = '/analyze';
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formType === 'file' ? formData : new URLSearchParams(formData)
+                });
+
+                const result = await response.json();
+                const resultsDiv = document.getElementById('results');
+                const keywordList = document.getElementById('keyword-list');
+                const searchResultDiv = document.getElementById('search-result');
+
+                if (response.ok) {
+                    document.getElementById('wordcloud').src = result.wordcloud + '?t=' + Date.now();
+                    resultsDiv.innerHTML = `
+                        <p>Всего слов: ${result.analysis.total_words}</p>
+                        <p>Уникальных слов: ${result.analysis.unique_words}</p>
+                        <p>Тональность: ${result.sentiment.polarity}</p>
+                        <p>Субъективность: ${result.sentiment.subjectivity}</p>
+                        <h3>Отсортированные слова:</h3>
+                        <ul>
+                            ${result.analysis.sorted_words.map(w => 
+                                `<li>${w.word} (${w.count})</li>`
+                            ).join('')}
+                        </ul>
+                    `;
+
+                    if (result.analysis.search_found !== undefined) {
+                        searchResultDiv.innerHTML = `<p>Результат поиска: ${result.analysis.search_found ? 'Найдено' : 'Не найдено'}</p>`;
+                    }
+
+                    keywordList.innerHTML = result.keywords.map(k => `<li>${k}</li>`).join('');
+                } else {
+                    resultsDiv.innerHTML = `<p style="color:red">Ошибка: ${result.error}</p>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<p style="color:red">Ошибка: ${error.message}</p>`;
+            }
+        }
+
+        document.getElementById('fileForm').addEventListener('submit', (e) => handleSubmit(e, 'file'));
+        document.getElementById('textForm').addEventListener('submit', (e) => handleSubmit(e, 'text'));
+    </script>
+    
+<script>
+document.querySelector('input[type="file"]').addEventListener('change', function(event) {
+    const file = event.target.files[0];
+        
+    if (!file) return;
+        
+    const reader = new FileReader();
+        
+    reader.onload = function(e) {
+        document.querySelector('textarea[name="text"]').value = e.target.result;
+    };
+    
+    reader.readAsText(file);
+    });
+</script>
+</body>
+</html>
