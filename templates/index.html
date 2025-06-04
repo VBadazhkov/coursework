@@ -1,15 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>Анализ текста</title>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            padding: 20px; 
-            display: flex; 
-            background-color: #f8f9fa; 
-            color: #333; 
-        }
+        body { font-family: Arial, sans-serif; padding: 20px; display: flex; background-color: #f8f9fa; color: #333; }
         .content { flex: 1; }
         #keywords {
             width: 280px;
@@ -53,27 +48,39 @@
             border-radius: 5px;
             cursor: pointer;
         }
-        button:hover { background-color: #6c757d; }
+        button:hover { background-color: #5a6268; }
+        #progress-bar {
+            width: 100%;
+            background-color: #ddd;
+            height: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: none;
+        }
+        #progress-bar div {
+            height: 100%;
+            width: 0;
+            background-color: #6c757d;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
     <div class="content">
-        <h1> Анализ текста</h1>
-        
+        <h1>Анализ текста</h1>
+
         <div class="input-section">
-            <form id="fileForm">
+            <form id="textForm" accept-charset="UTF-8">
                 <div class="form-group">
-                    <label>Загрузите файл:</label>
-                    <input type="file" name="file" accept=".txt">
+                    <label>Загрузите файл (.txt, .docx или .pdf):</label>
+                    <input type="file" id="fileInput" accept=".txt,.docx,.pdf">
                 </div>
-                
-            </form>
-            
-            <p>Или введите текст:</p>
-            <form id="textForm">
+
                 <div class="form-group">
+                    <label>Или введите/отредактируйте текст:</label>
                     <textarea name="text" rows="5" cols="50"></textarea>
                 </div>
+
                 <div class="form-group">
                     <label>Сортировка:</label>
                     <select name="sort_mode">
@@ -82,26 +89,37 @@
                         <option value="length">По длине</option>
                     </select>
                 </div>
+
                 <div class="form-group">
                     <label>Направление сортировки:</label>
                     <label><input type="radio" name="ascending" value="false" checked> По убыванию</label>
                     <label><input type="radio" name="ascending" value="true"> По возрастанию</label>
                 </div>
+
                 <div class="form-group">
                     <label>Поиск слова:</label>
                     <input type="text" name="search">
                 </div>
+
                 <div class="form-group">
                     <label>Учитывать регистр:</label>
                     <label><input type="checkbox" name="case_sensitive" value="true"> Да</label>
                 </div>
+
                 <button type="submit">Анализировать текст</button>
+                <button type="button" id="clearButton">Очистить поле</button> <!-- Кнопка очистки -->
             </form>
         </div>
-        
+
+        <div id="progress-bar">
+            <div id="progress"></div>
+        </div> <!-- Прогресс-бар -->
+
         <div id="results-container">
+            <div id="status-message" style="margin-top: 15px; font-weight: bold; color: #5a6268;"></div>
+
             <h3>Результаты анализа</h3>
-            <div id="search-result"></div> <!-- Блок для результата поиска -->
+            <div id="search-result"></div>
             <div id="results"></div>
             <img id="wordcloud" src="" alt="Облако слов">
         </div>
@@ -112,24 +130,102 @@
         <ul id="keyword-list"></ul>
     </div>
 
+    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+
     <script>
-        async function handleSubmit(e, formType) {
+        // Очистка текста
+        document.getElementById('clearButton').addEventListener('click', function() {
+            document.querySelector('textarea[name="text"]').value = '';
+        });
+
+        // Прогресс-бар обновление
+        function updateProgressBar(progress) {
+            const progressBar = document.getElementById('progress');
+            progressBar.style.width = progress + '%';
+        }
+
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const textarea = document.querySelector('textarea[name="text"]');
+
+            // Показываем прогресс-бар
+            document.getElementById('progress-bar').style.display = 'block';
+            updateProgressBar(0);
+
+            if (file.name.endsWith('.txt')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    updateProgressBar(50); // Прогресс 50% при загрузке
+                    textarea.value = e.target.result;
+                    updateProgressBar(100); // Прогресс 100% после завершения
+                };
+                reader.readAsText(file);
+            } else if (file.name.endsWith('.docx')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    mammoth.extractRawText({ arrayBuffer: e.target.result })
+                        .then(result => {
+                            updateProgressBar(50); // Прогресс 50% при загрузке
+                            textarea.value = result.value;
+                            updateProgressBar(100); // Прогресс 100% после завершения
+                        })
+                        .catch(err => alert("Ошибка чтения .docx: " + err.message));
+                };
+                reader.readAsArrayBuffer(file);
+            } else if (file.name.endsWith('.pdf')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const pdfData = new Uint8Array(e.target.result);
+                    pdfjsLib.getDocument(pdfData).promise.then(function(pdf) {
+                        let textContent = '';
+                        let totalPages = pdf.numPages;
+
+                        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                            pdf.getPage(pageNum).then(function(page) {
+                                page.getTextContent().then(function(text) {
+                                    text.items.forEach(function(item) {
+                                        textContent += item.str + ' ';
+                                    });
+
+                                    if (pageNum === totalPages) {
+                                        textarea.value = textContent;
+                                        updateProgressBar(100); // Прогресс 100% после завершения
+                                    }
+                                });
+                            });
+                        }
+                    }).catch(err => alert("Ошибка чтения PDF: " + err.message));
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert("Поддерживаются только .txt, .docx и .pdf файлы.");
+            }
+        });
+
+        async function handleSubmit(e) {
+            document.getElementById('status-message').innerText = '';
+
             e.preventDefault();
-            const formData = new FormData(e.target);
+            const formData = new URLSearchParams(new FormData(e.target));
             const url = '/analyze';
+
+            const resultsDiv = document.getElementById('results');
+            const keywordList = document.getElementById('keyword-list');
+            const searchResultDiv = document.getElementById('search-result');
 
             try {
                 const response = await fetch(url, {
                     method: 'POST',
-                    body: formType === 'file' ? formData : new URLSearchParams(formData)
+                    body: formData
                 });
 
                 const result = await response.json();
-                const resultsDiv = document.getElementById('results');
-                const keywordList = document.getElementById('keyword-list');
-                const searchResultDiv = document.getElementById('search-result');
 
                 if (response.ok) {
+                    document.getElementById('status-message').innerText = '✅ Обработка текста завершена';
                     document.getElementById('wordcloud').src = result.wordcloud + '?t=' + Date.now();
                     resultsDiv.innerHTML = `
                         <p>Всего слов: ${result.analysis.total_words}</p>
@@ -143,11 +239,9 @@
                             ).join('')}
                         </ul>
                     `;
-
                     if (result.analysis.search_found !== undefined) {
                         searchResultDiv.innerHTML = `<p>Результат поиска: ${result.analysis.search_found ? 'Найдено' : 'Не найдено'}</p>`;
                     }
-
                     keywordList.innerHTML = result.keywords.map(k => `<li>${k}</li>`).join('');
                 } else {
                     resultsDiv.innerHTML = `<p style="color:red">Ошибка: ${result.error}</p>`;
@@ -157,24 +251,7 @@
             }
         }
 
-        document.getElementById('fileForm').addEventListener('submit', (e) => handleSubmit(e, 'file'));
-        document.getElementById('textForm').addEventListener('submit', (e) => handleSubmit(e, 'text'));
+        document.getElementById('textForm').addEventListener('submit', handleSubmit);
     </script>
-    
-<script>
-document.querySelector('input[type="file"]').addEventListener('change', function(event) {
-    const file = event.target.files[0];
-        
-    if (!file) return;
-        
-    const reader = new FileReader();
-        
-    reader.onload = function(e) {
-        document.querySelector('textarea[name="text"]').value = e.target.result;
-    };
-    
-    reader.readAsText(file);
-    });
-</script>
 </body>
 </html>

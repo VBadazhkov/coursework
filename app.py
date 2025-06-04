@@ -7,13 +7,26 @@ import matplotlib.pyplot as plt
 from werkzeug.utils import secure_filename
 from googletrans import Translator
 from yake import KeywordExtractor
-
+import textract
+import re
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
-ALLOWED_EXTENSIONS = {'txt'}
+ALLOWED_EXTENSIONS = {'txt', 'docx', 'pptx', 'pdf'}
 
+def clean_text(text):
+    text = re.sub(r'[^\w\s]', ' ', text)
+    text = re.sub(r'\d+', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+def extract_text_from_docx(file_path):
+    try:
+        text = textract.process(file_path, encoding='utf-8')
+        return text.decode('utf-8')
+    except Exception as e:
+        return f"Ошибка при textract: {str(e)}"
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -31,15 +44,13 @@ def run_cpp(text, sort_mode="frequency", ascending=False, search_target="", case
             cmd.append('--ascending')
         if case_sensitive:
             cmd.append('--case-sensitive')
-        if search_target:
-            cmd.extend(['--search', search_target])
-        
+
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            encoding='utf-8'
         )
         stdout, stderr = proc.communicate(text)
         
@@ -53,8 +64,6 @@ def run_cpp(text, sort_mode="frequency", ascending=False, search_target="", case
                 result["total_words"] = int(line.split(": ")[1])
             elif line.startswith("unique_words:"):
                 result["unique_words"] = int(line.split(": ")[1])
-            elif line.startswith("search_found:"):
-                result["search_found"] = line.split(": ")[1] == "true"
             elif '\t' in line:
                 word, count = line.split('\t')
                 result.setdefault("sorted_words", []).append({
@@ -62,18 +71,27 @@ def run_cpp(text, sort_mode="frequency", ascending=False, search_target="", case
                     "count": int(count)
                 })
         result["sorted_words"] = result.get("sorted_words", [])[:15]
+
+        if search_target:
+            search_word = ''.join(c for c in search_target if c.isalnum())
+            if not case_sensitive:
+                search_word = search_word.lower()
+            
+            words_in_text = [''.join(c for c in w if c.isalnum()) for w in text.split()]
+            if not case_sensitive:
+                words_in_text = [w.lower() for w in words_in_text]
+            
+            result["search_found"] = search_word in words_in_text
+        
         return result, None
     
     except Exception as e:
         return None, str(e)
 
 def analyze_sentiment(text):
-    translator = Translator()
+    blob = TextBlob(text)
     
-    if any('а' <= ch <= 'я' or 'А' <= ch <= 'Я' for ch in text):
-        text = translator.translate(text, src='ru', dest='en').text
-    
-    sentiment = TextBlob(text).sentiment
+    sentiment = blob.sentiment
     return {
         "polarity": round(sentiment.polarity, 4),
         "subjectivity": round(sentiment.subjectivity, 4)
@@ -95,8 +113,13 @@ def analyze():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
 
-        with open(filepath, 'r', encoding='utf-8') as f:
-            text = f.read()
+        if filename.endswith('.txt'):
+            with open(filepath, 'r', encoding='utf-8', errors="replace") as f:
+                text = f.read()
+        elif filename.endswith('.docx'):
+            text = extract_text_from_docx(filepath)
+        else:
+            return jsonify({'error': 'Неподдерживаемый тип файла'}), 400
 
         os.remove(filepath)
 
@@ -106,9 +129,7 @@ def analyze():
     else:
         return jsonify({'error': 'Введите текст или загрузите файл'}), 400
 
-
-    text = text.replace("\u2015", "-")
-
+    text = clean_text(text)
     sort_mode = request.form.get('sort_mode', 'frequency')
     ascending = request.form.get('ascending', 'false') == 'true'
     search_target = request.form.get('search', '').strip()
@@ -123,14 +144,18 @@ def analyze():
     keywords = extract_keywords(text)
 
     filtered_text = " ".join(extract_keywords(text))
-    wordcloud = WordCloud(background_color="white", contour_color="black").generate(filtered_text)
 
-    plt.figure(figsize=(10, 5))
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis("off")
+    if not filtered_text.strip():
+        wordcloud_path = None
+    else:
+        wordcloud = WordCloud(background_color="white", contour_color="black").generate(filtered_text)
 
-    wordcloud_path = os.path.join('static', 'wordcloud.png')
-    plt.savefig(wordcloud_path)
+        plt.figure(figsize=(10, 5))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis("off")
+
+        wordcloud_path = os.path.join('static', 'wordcloud.png')
+        plt.savefig(wordcloud_path)
 
     return jsonify({
         'wordcloud': wordcloud_path,
