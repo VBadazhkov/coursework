@@ -107,13 +107,13 @@
                 </div>
 
                 <button type="submit">Анализировать текст</button>
-                <button type="button" id="clearButton">Очистить поле</button> <!-- Кнопка очистки -->
+                <button type="button" id="clearButton">Очистить поле</button>
             </form>
         </div>
 
         <div id="progress-bar">
             <div id="progress"></div>
-        </div> <!-- Прогресс-бар -->
+        </div>
 
         <div id="results-container">
             <div id="status-message" style="margin-top: 15px; font-weight: bold; color: #5a6268;"></div>
@@ -134,12 +134,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
 
     <script>
-        // Очистка текста
         document.getElementById('clearButton').addEventListener('click', function() {
             document.querySelector('textarea[name="text"]').value = '';
         });
 
-        // Прогресс-бар обновление
         function updateProgressBar(progress) {
             const progressBar = document.getElementById('progress');
             progressBar.style.width = progress + '%';
@@ -151,16 +149,15 @@
 
             const textarea = document.querySelector('textarea[name="text"]');
 
-            // Показываем прогресс-бар
             document.getElementById('progress-bar').style.display = 'block';
             updateProgressBar(0);
 
             if (file.name.endsWith('.txt')) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    updateProgressBar(50); // Прогресс 50% при загрузке
+                    updateProgressBar(50);
                     textarea.value = e.target.result;
-                    updateProgressBar(100); // Прогресс 100% после завершения
+                    updateProgressBar(100);
                 };
                 reader.readAsText(file);
             } else if (file.name.endsWith('.docx')) {
@@ -168,9 +165,9 @@
                 reader.onload = function(e) {
                     mammoth.extractRawText({ arrayBuffer: e.target.result })
                         .then(result => {
-                            updateProgressBar(50); // Прогресс 50% при загрузке
+                            updateProgressBar(50);
                             textarea.value = result.value;
-                            updateProgressBar(100); // Прогресс 100% после завершения
+                            updateProgressBar(100);
                         })
                         .catch(err => alert("Ошибка чтения .docx: " + err.message));
                 };
@@ -192,7 +189,7 @@
 
                                     if (pageNum === totalPages) {
                                         textarea.value = textContent;
-                                        updateProgressBar(100); // Прогресс 100% после завершения
+                                        updateProgressBar(100);
                                     }
                                 });
                             });

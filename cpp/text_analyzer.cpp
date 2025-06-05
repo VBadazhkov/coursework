@@ -74,20 +74,17 @@ bool search_word(const string& text, string& target, bool case_sensitive) {
 
 int main(int argc, char* argv[]) {
     
-    // Чтение входного текста
     string text, line;
     while (getline(cin, line)) {
         text += line + " ";
     }
     
-    // Удаление лишних пробелов и переносов строк
     replace(text.begin(), text.end(), '\n', ' ');
     text.erase(unique(text.begin(), text.end(), [](char a, char b) {
         return isspace(a) && isspace(b);
     }), text.end());
     if (!text.empty() && text.back() == ' ') text.pop_back();
 
-    // Парсинг аргументов командной строки
     string sort_mode = "frequency";
     bool ascending = false;
     string search_target = "";
@@ -110,12 +107,10 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Подсчет слов
     int total_words = 0;
     auto word_counts = count_words(text, case_sensitive, total_words);
     auto sorted_words = sort_words(word_counts, sort_mode, ascending);
     
-    // Вывод результатов
     cout << "total_words: " << total_words << endl;
     cout << "unique_words: " << word_counts.size() << endl;
     
@@ -123,7 +118,6 @@ int main(int argc, char* argv[]) {
         cout << word << "\t" << count << endl;
     }
     
-    // Поиск слова
     if (!search_target.empty()) {
         bool found = search_word(text, search_target, case_sensitive);
         cout << "search_found: " << (found ? "true" : "false") << endl;

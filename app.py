@@ -5,7 +5,6 @@ from textblob import TextBlob
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 from werkzeug.utils import secure_filename
-from googletrans import Translator
 from yake import KeywordExtractor
 import textract
 import re
